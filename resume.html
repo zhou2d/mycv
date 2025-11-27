@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protected Access</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        /* Reset and Base Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            font-family: sans-serif;
+        }
+
+        body {
+            color: #000;
+            background: #fff;
+            font: 16px/1.2 'Inter', -apple-system, BlinkMacSystemFont, Arial, 'Helvetica Neue', Helvetica, sans-serif;
+            min-width: 320px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Password Protection Overlay */
+        #password-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #001225 0%, #00a9b0 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        }
+
+        #password-overlay.hidden {
+            display: none;
+        }
+
+        .password-container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .password-container h1 {
+            color: #001225;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .password-container p {
+            color: #7f7e82;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .password-input-group {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .password-input-group input {
+            width: 100%;
+            padding: 15px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .password-input-group input:focus {
+            outline: none;
+            border-color: #00a9b0;
+        }
+
+        .password-submit {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #0078c3 0%, #00a9b0 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .password-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 169, 176, 0.4);
+        }
+
+        .password-submit:active {
+            transform: translateY(0);
+        }
+
+        .error-message {
+            color: #d32f2f;
+            font-size: 14px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .lock-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #00a9b0;
+        }
+
+        #protected-content {
+            display: none;
+        }
+
+        #protected-content.unlocked {
+            display: block;
+        }
+
+        img {
+            max-width: 100%;
+            height: auto;
+            vertical-align: top;
+        }
+
+        a {
+            color: #0078c3;
+            text-decoration: none;
+            transition: color 0.3s linear, opacity 0.3s linear;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: bold;
+            margin: 0 0 0.5em;
+        }
+
+        h1 { font-size: 30px; }
+        h2 { font-size: 27px; }
+        h3 { font-size: 24px; }
+
+        p {
+            margin: 0 0 1em;
+        }
+
+        ul {
+            list-style: none;
+        }
+
+        /* Layout */
+        #wrapper {
+            overflow: hidden;
+            position: relative;
+        }
+
+        #sidebar {
+            background: #001225;
+            color: #fff;
+            padding: 100px 20px 20px 50px;
+            position: relative;
+        }
+
+        #main {
+            padding: 50px 25px 10px;
+        }
+
+        /* Sidebar Styles */
+        .logo {
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 200px;
+        }
+
+        .logo img {
+            border-radius: 50%;
+            width: 160px;
+            height: 160px;
+            object-fit: cover;
+            border: 4px solid #00a9b0;
+        }
+
+        .sidebar-info-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .sidebar-info-list li {
+            margin: 0 0 20px;
+        }
+
+        .sidebar-info-list .dt {
+            display: block;
+            text-transform: uppercase;
+            margin: 0 0 5px;
+            color: #00a9b0;
+            font-weight: 900;
+            font-size: 14px;
+            line-height: 1.2;
+        }
+
+        .sidebar-info-list .dd {
+            display: block;
+            color: #fff;
+            font-weight: 400;
+            font-size: 21px;
+            line-height: 1.21;
+        }
+
+        .sidebar-info-list .name {
+            font-size: 32px;
+            font-weight: 700;
+        }
+
+        .sidebar-info-list .dd .link {
+            color: inherit;
+            display: inline-block;
+            position: relative;
+            padding: 0 0 2px;
+        }
+
+        .sidebar-info-list .dd .link::before {
+            content: "";
+            position: absolute;
+            bottom: 0;
+            left: 60%;
+            right: 60%;
+            height: 2px;
+            background: linear-gradient(to right, #0078c3, #00a9b0);
+            transition: left 0.3s linear, right 0.3s linear;
+        }
+
+        .sidebar-info-list .dd .link:hover {
+            text-decoration: none;
+        }
+
+        .sidebar-info-list .dd .link:hover::before {
+            left: 0;
+            right: 0;
+        }
+
+        .sidebar-info-list .copyright {
+            color: #102742;
+            margin-top: 80px;
+            font-size: 14px;
+        }
+
+        /* Main Content Styles */
+        .two-columns {
+            padding: 50px 25px 10px;
+        }
+
+        .info-box {
+            margin: 0 0 50px;
+        }
+
+        .info-box p {
+            margin: 0 0 15px;
+        }
+
+        h2 {
+            margin: 0 0 10px;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: #00a9b0;
+            font-size: 22px;
+            line-height: 1.21;
+        }
+
+        .text-box {
+            color: #001225;
+            font-size: 18px;
+            line-height: 1.22;
+        }
+
+        /* Timeline List */
+        .timeline-list {
+            position: relative;
+        }
+
+        .timeline-list > li {
+            margin: 0 0 55px;
+        }
+
+        .year {
+            text-transform: uppercase;
+            font-weight: 900;
+            line-height: 1.2;
+            font-size: 15px;
+            color: #7f7e82;
+            margin: 0 0 12px;
+        }
+
+        h3 {
+            font-weight: 400;
+            margin: 0 0 10px;
+            color: #000;
+            line-height: 1.2;
+            font-size: 21px;
+        }
+
+        h3 strong {
+            font-weight: 700;
+        }
+
+        .emoji {
+            display: inline-block;
+            margin-right: 5px;
+        }
+
+        /* Bullet List */
+        .bullet-list > li {
+            margin: 0 0 15px;
+            position: relative;
+            padding: 0 0 0 18px;
+        }
+
+        .bullet-list > li::before {
+            content: "";
+            background: #231f20;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            position: absolute;
+            top: 6px;
+            left: 2px;
+        }
+
+        /* Category List */
+        .category-list > li {
+            margin: 0 0 15px;
+        }
+
+        .category-list .dt {
+            display: inline-block;
+            font-weight: 700;
+            margin: 0 10px 0 0;
+            color: #7f7e82;
+            min-width: 80px;
+        }
+
+        /* Tag List */
+        .tag-list {
+            color: #001225;
+            display: inline;
+        }
+
+        .tag-list > li {
+            display: inline;
+        }
+
+        .tag-list > li::after {
+            content: " | ";
+            color: #7f7e82;
+        }
+
+        .tag-list > li:last-child::after {
+            display: none;
+        }
+
+        /* Responsive Design */
+        @media (min-width: 768px) {
+            #sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                width: 270px;
+                overflow: auto;
+                padding: 100px 30px 20px;
+                z-index: 99;
+                min-height: 100vh;
+            }
+
+            #main {
+                padding-left: 270px;
+            }
+
+            .timeline-list {
+                padding: 10px 0;
+            }
+
+            .timeline-list::before {
+                content: "";
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background: #7f7e82;
+                position: absolute;
+                bottom: 0;
+                left: 70px;
+                z-index: 1;
+            }
+
+            .timeline-list > li {
+                position: relative;
+                padding: 0 0 0 110px;
+            }
+
+            .timeline-list > li:last-child {
+                margin: 0;
+            }
+
+            .timeline-list > li::before {
+                content: "";
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background: #001225;
+                position: absolute;
+                top: 8px;
+                left: 70px;
+                z-index: 1;
+            }
+
+            .timeline-list > li::after {
+                content: "";
+                width: 2px;
+                position: absolute;
+                top: 10px;
+                left: 74px;
+                bottom: -65px;
+                background: linear-gradient(#fff, #7f7e82);
+            }
+
+            .timeline-list > li:last-child::after {
+                bottom: -22px;
+            }
+
+            .year.absolute {
+                width: 70px;
+                position: absolute;
+                top: 5px;
+                left: 0;
+                margin: 0;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .two-columns {
+                display: flex;
+                flex-wrap: wrap;
+            }
+
+            .two-columns .col-1 {
+                width: 60%;
+                padding: 0 15px 0 0;
+            }
+
+            .two-columns .col-2 {
+                width: 40%;
+                padding: 0 0 0 15px;
+            }
+        }
+
+        @media (min-width: 1200px) {
+            body {
+                font-size: 17px;
+            }
+
+            #sidebar {
+                width: 336px;
+                padding: 150px 20px 20px 30px;
+            }
+
+            #main {
+                padding-left: 336px;
+            }
+
+            .two-columns {
+                padding: 48px 61px 10px;
+            }
+        }
+
+        @media (min-width: 1600px) {
+            body {
+                font-size: 19px;
+            }
+
+            #sidebar {
+                width: 420px;
+                padding: 180px 30px 20px 60px;
+            }
+
+            #main {
+                padding-left: 420px;
+            }
+
+            .sidebar-info-list .dd {
+                font-size: 24px;
+            }
+
+            .sidebar-info-list .name {
+                font-size: 36px;
+            }
+
+            h2 {
+                font-size: 28px;
+            }
+
+            h3 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Password Protection Overlay -->
+    <div id="password-overlay">
+        <div class="password-container">
+            <div class="lock-icon">🔒</div>
+            <h1>Protected Content</h1>
+            <p>Please enter the password to access this resume</p>
+            <div class="password-input-group">
+                <input type="password" id="password-input" placeholder="Enter password" autocomplete="off">
+            </div>
+            <button class="password-submit" onclick="checkPassword()">Unlock</button>
+            <div class="error-message" id="error-message">Incorrect password. Please try again.</div>
+        </div>
+    </div>
+
+    <!-- Protected Content (Hidden by default) -->
+    <div id="protected-content">
+    <div id="wrapper">
+        <aside id="sidebar">
+            <div class="logo">
+                <!-- Replace with your actual profile image -->
+                <img src="https://media.licdn.com/dms/image/v2/C5603AQENC9zAYVX_bw/profile-displayphoto-shrink_400_400/profile-displayphoto-shrink_400_400/0/1516263571262?e=1765411200&v=beta&t=37pn7aTVv_rUUVbzp00nxTcGtoMoV1eQ-il6SIIE9Rw" alt="Profile Photo">
+            </div>
+            <ul class="sidebar-info-list">
+                <li>
+                    <span class="dt">Name</span>
+                    <span class="dd name">Dake</span>
+                </li>
+                <li>
+                    <span class="dt">Focus</span>
+                    <span class="dd">Technology Risk Management<br>Cybersecurity & System Resilience</span>
+                </li>
+                <li>
+                    <span class="dt">Certification</span>
+                    <span class="dd">Certified InfoSec Manager (CISM)</span>
+                </li>
+                <li>
+                    <span class="dt">Say Hello</span>
+                    <span class="dd">
+                        zhou2d at yahoo.com</span>
+                    </span>
+                </li>
+                <li>
+                    <span class="dt">Connect</span>
+                    <span class="dd">
+                        <a href="https://www.linkedin.com/in/dakezhou" target="_blank" class="link">LinkedIn Profile</a>
+                    </span>
+                </li>
+                <li class="copyright">
+                    © 2025 - Powered by AI
+                </li>
+            </ul>
+        </aside>
+
+        <main id="main">
+            <div class="two-columns">
+                <div class="col-1">
+                    <!-- About Section -->
+                    <div class="info-box">
+                        <h2>About</h2>
+                        <div class="text-box">
+                            <p>Technology risk management professional with 15+ years of experience in prominent banks and financial services across Singapore, China, and New Zealand. Certified CISM with deep expertise in cybersecurity, system resilience, and emerging technologies including AI/ML, blockchain, and quantum computing.</p>
+                            <p>Passionate about driving digital transformation while maintaining robust security frameworks. Proven track record in establishing governance structures, managing complex programs, and leading high-performing teams to deliver successful outcomes aligned with regulatory requirements and business objectives.</p>
+                            <p>Fluent in English and Chinese, with a self-driven approach focused on continuous improvement, innovation, and service excellence.</p>
+                        </div>
+                    </div>
+
+                    <!-- Experience Section -->
+                    <div class="info-box">
+                        <h2>Experience</h2>
+                        <ul class="timeline-list">
+                            <li>
+                                <div class="year absolute">Sep 2024 – Present</div>
+                                <h3><strong>  SVP, Line 1.5 Technology Risk Lead</strong> DBS Bank Singapore</h3>
+                                <div class="text-box">
+                                    <p><strong>Cybersecurity, Resilience & Emerging Technologies</strong></p>
+                                    <ul class="bullet-list">
+                                        <li>Lead Line 1.5 technology risk function covering cybersecurity, system resilience, and emerging technologies (AI/ML, GenAI, blockchain, quantum computing, open banking)</li>
+                                        <li>Manage end-to-end tech risk lifecycle from identification and assessment to mitigation and reporting</li>
+                                        <li>Strengthen system resilience through robust disaster recovery planning, chaos engineering, and emergency response strategies</li>
+                                        <li>Implement comprehensive risk framework aligned with Group policies, regulatory requirements, and industry standards</li>
+                                        <li>Facilitate risk assessment processes and conduct regular reviews with stakeholders</li>
+                                        <li>Provide oversight on control remediation efforts and ensure quality of risk mitigation activities</li>
+                                    </ul>
+                                </div>
+                            </li>
+
+                            <li>
+                                <div class="year absolute">Sep 2022 – Aug 2024</div>
+                                <h3><strong>  Head of Business InfoSec & Risk Management</strong> Morgan Stanley Shanghai</h3>
+                                <div class="text-box">
+                                    <p><strong>Banking, Securities, Futures, Fund Management Applications</strong></p>
+                                    <ul class="bullet-list">
+                                        <li>Led comprehensive technology and cyber risk identification, assessment, mitigation, and reporting</li>
+                                        <li>Designed and implemented robust security strategies, standards, and policies ensuring global and local regulatory compliance</li>
+                                        <li>Conducted risk assessments for systems, applications, networks, and infrastructure</li>
+                                        <li>Developed risk models, metrics, and frameworks to quantify and prioritize technology risks</li>
+                                        <li>Collaborated with IT and security teams to implement effective controls and safeguards</li>
+                                        <li>Served as trusted advisor to senior management on technology risk matters</li>
+                                        <li>Fostered risk awareness culture through training, awareness campaigns, and knowledge-sharing initiatives</li>
+                                    </ul>
+                                </div>
+                            </li>
+
+                            <li>
+                                <div class="year absolute">Sep 2020 – Sep 2022</div>
+                                <h3><strong>  Chief Information Officer</strong> GB Digital Ltd, Taipei | Singapore</h3>
+                                <div class="text-box">
+                                    <p><strong>FinTech Leadership</strong></p>
+                                    <ul class="bullet-list">
+                                        <li>Provided strategic leadership and direction for all technology initiatives at FinTech start-up</li>
+                                        <li>Managed IT teams (120+ headcount) ensuring on-time delivery and support of mission-critical systems</li>
+                                        <li>Established information security policies, incident management, and project governance framework</li>
+                                        <li>Developed new digital product strategies and successfully delivered several pivotal products</li>
+                                        <li>Increased online services revenue by 30% during COVID pandemic</li>
+                                        <li>Enforced technology policies, standards, guidelines, and operational procedures</li>
+                                    </ul>
+                                </div>
+                            </li>
+
+                            <li>
+                                <div class="year absolute">Sep 2018 – Sep 2020</div>
+                                <h3><strong>  SVP, Head of Business T&O Management</strong> United Overseas Bank, China</h3>
+                                <div class="text-box">
+                                    <ul class="bullet-list">
+                                        <li>Developed and enforced business technology strategies supporting UOB's growth in China</li>
+                                        <li>Partnered with senior business stakeholders in co-shaping solutions aligned to Group strategies</li>
+                                        <li>Successfully initiated and delivered UOB Group's first automatic trading platform</li>
+                                        <li>Led development of multi-year strategy, architecture, and implementation plans for retail and private banking digitalization</li>
+                                        <li>Managed outsourcing arrangements and Service Delivery Managers ensuring SLA compliance</li>
+                                        <li>Oversaw project execution as escalation point and resolved roadblocks</li>
+                                    </ul>
+                                </div>
+                            </li>
+
+                            <li>
+                                <div class="year absolute">Jun 2010 – Sep 2018</div>
+                                <h3><strong>  VP, Country IT Head</strong> Barclays Bank PLC, China</h3>
+                                <div class="text-box">
+                                    <ul class="bullet-list">
+                                        <li>Managed local technology compliance, risks, and strategic technology project delivery</li>
+                                        <li>Served as technology face-off to local business stakeholders and regulators</li>
+                                        <li>Successfully delivered multiple key projects supporting China business expansion</li>
+                                        <li>Implemented local application management standards and controls (selected as AP model)</li>
+                                        <li>Established technical standards and processes aligned with group policies and local regulations</li>
+                                        <li>Supervised onshore support teams providing technology operations service</li>
+                                        <li>Led risk incident investigations, audit finding reviews, and solution improvements</li>
+                                    </ul>
+                                </div>
+                            </li>
+
+                            <li>
+                                <div class="year absolute">Jun 2010 – Jun 2014</div>
+                                <h3><strong>  Interim CIO / CIO Advisor</strong> New China Trust, Shanghai | Chongqing</h3>
+                                <div class="text-box">
+                                    <ul class="bullet-list">
+                                        <li>Represented Barclays as strategic investor to elevate NCT's IT maturity</li>
+                                        <li>Developed IT strategies aligned to business goals</li>
+                                        <li>Recruited and built effective IT workforce</li>
+                                        <li>Established strong IT governance, procedures, and best practices</li>
+                                        <li>Identified IT operational risks and implemented remediation</li>
+                                        <li>Streamlined governance structure and introduced policies, standards, and metrics</li>
+                                        <li>Managed and delivered strategic projects streamlining business workflow front-to-back</li>
+                                    </ul>
+                                </div>
+                            </li>
+
+                            <li>
+                                <div class="year absolute">Oct 2005 – Jun 2010</div>
+                                <h3><strong>  Software Development Manager</strong> Barclays Capital, Singapore</h3>
+                                <div class="text-box">
+                                    <p><strong>Deputy Unit Head, Global Software Development Centre</strong></p>
+                                    <ul class="bullet-list">
+                                        <li>Oversaw globally distributed software development team working on capital market systems</li>
+                                        <li>Managed high-throughput, low-latency front office trading systems and complex derivatives back-office applications</li>
+                                        <li>Improved OTC derivative confirmation STP rates from 10% to 40%</li>
+                                        <li>Improved DTCC credit confirmation accuracy from 59% to 98% (Barclays Capital ranking: 17th to 1st)</li>
+                                        <li>Received Barclays' CIO Technology Award 2007 for innovative managed database release solution</li>
+                                        <li>Built highly motivated, highly productive offshore development team from scratch</li>
+                                        <li>Ensured continuous delivery of application services serving 2,000+ users globally</li>
+                                    </ul>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="col-2">
+
+
+                    <!-- Key Attributes Section -->
+                    <div class="info-box">
+                        <h2>Key Attributes</h2>
+                        <ul class="category-list">
+                            <li>
+                                <span class="dt">Expertise:</span>
+                                <span>Banking/Securities Technology Regulations, Technology GRC, System Resilience, Cybersecurity, Data Privacy</span>
+                            </li>
+                            <li>
+                                <span class="dt">Leadership:</span>
+                                <span>Self-driven, Proactive, Independent, Service & Innovation Focused</span>
+                            </li>
+                            <li>
+                                <span class="dt">Languages:</span>
+                                <span>Fluent in English and Chinese</span>
+                            </li>
+                            <li>
+                                <span class="dt">Strengths:</span>
+                                <span>Excellent Communication, Continuous Improvement, Process Streamlining, Curious & Humble Mindset</span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Technical Skills Section -->
+                    <div class="info-box">
+                        <h2>Technical Focus</h2>
+                        <ul class="category-list">
+                            <li>
+                                <span class="dt">Risk Management:</span>
+                                <ul class="tag-list">
+                                    <li>Technology Risk</li>
+                                    <li>Cybersecurity</li>
+                                    <li>Information Security</li>
+                                    <li>System Resilience</li>
+                                    <li>GRC</li>
+                                    <li>Compliance</li>
+                                    <li>Audit</li>
+                                </ul>
+                            </li>
+                            <li>
+                                <span class="dt">Banking Tech:</span>
+                                <ul class="tag-list">
+                                    <li>Trading Systems</li>
+                                    <li>Capital Markets</li>
+                                    <li>Core Banking</li>
+                                    <li>Payment Systems</li>
+                                    <li>Digital Banking</li>
+                                </ul>
+                            </li>							
+                            <li>
+                                <span class="dt">Emerging Tech:</span>
+                                <ul class="tag-list">
+                                    <li>GenAI</li>
+                                    <li>Blockchain</li>
+                                    <li>Quantum Computing</li>
+                                    <li>Open Banking</li>
+                                </ul>
+                            </li>
+
+                            <li>
+                                <span class="dt">Operations:</span>
+                                <ul class="tag-list">
+                                    <li>Disaster Recovery</li>
+                                    <li>Chaos Engineering</li>
+                                    <li>Incident Management</li>
+                                    <li>Change Management</li>
+                                    <li>Problem Management</li>
+                                </ul>
+                            </li>
+                            <li>
+                                <span class="dt">Frameworks:</span>
+                                <ul class="tag-list">
+                                    <li>ISO 27001</li>
+                                    <li>NIST</li>
+                                    <li>PCI DSS</li>
+                                    <li>GDPR</li>
+                                    <li>MAS TRM</li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </div>
+                    <!-- Education Section -->
+                    <div class="info-box">
+                        <h2>Education</h2>
+                        <h3><strong>B.E.</strong> Zhejiang University, China</h3>
+                        <p class="text-box">Electronic Engineering & Information Science</p>
+                        
+                        <h3 style="margin-top: 20px;"><strong>Graduate Studies</strong> Massey University, NZ</h3>
+                        <p class="text-box">Computer Science</p>
+                    </div>
+                    <!-- Personal Section -->
+                    <div class="info-box">
+                        <h2>Personal</h2>
+                        <ul class="category-list">
+                            <li>
+                                <span class="dt">Status:</span>
+                                <span>Married with Two Children</span>
+                            </li>
+                            <li>
+                                <span class="dt">Citizenship:</span>
+                                <span>NZ Citizen, Singapore PR</span>
+                            </li>
+                            <li>
+                                <span class="dt">Location:</span>
+                                <span>Singapore</span>
+                            </li>
+                         </ul>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    </div> <!-- End of protected-content -->
+
+    <script>
+        // Password verification
+        const correctPassword = 'dake.zhou';
+        
+        // Check if already authenticated in this session
+        if (sessionStorage.getItem('authenticated') === 'true') {
+            unlockContent();
+        }
+
+        // Add enter key support
+        document.getElementById('password-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                checkPassword();
+            }
+        });
+
+        function checkPassword() {
+            const input = document.getElementById('password-input');
+            const errorMsg = document.getElementById('error-message');
+            
+            if (input.value === correctPassword) {
+                // Correct password
+                sessionStorage.setItem('authenticated', 'true');
+                unlockContent();
+            } else {
+                // Wrong password
+                errorMsg.classList.add('show');
+                input.value = '';
+                input.style.borderColor = '#d32f2f';
+                
+                // Shake animation
+                input.parentElement.style.animation = 'shake 0.5s';
+                setTimeout(() => {
+                    input.parentElement.style.animation = '';
+                    input.style.borderColor = '#e0e0e0';
+                }, 500);
+            }
+        }
+
+        function unlockContent() {
+            const overlay = document.getElementById('password-overlay');
+            const content = document.getElementById('protected-content');
+            
+            overlay.classList.add('hidden');
+            content.classList.add('unlocked');
+            document.title = 'Technology Risk & Security Leader | CISM';
+        }
+
+        // Prevent right-click and common shortcuts (basic protection)
+        document.addEventListener('contextmenu', function(e) {
+            if (!sessionStorage.getItem('authenticated')) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (!sessionStorage.getItem('authenticated')) {
+                // Prevent F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
+                if (e.keyCode === 123 || 
+                    (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74)) ||
+                    (e.ctrlKey && e.keyCode === 85)) {
+                    e.preventDefault();
+                    return false;
+                }
+            }
+        });
+
+        // Add shake animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes shake {
+                0%, 100% { transform: translateX(0); }
+                25% { transform: translateX(-10px); }
+                75% { transform: translateX(10px); }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>
